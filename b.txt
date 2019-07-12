@@ -1,4 +1,0 @@
-test_b
-
-
-shor_term_mod
