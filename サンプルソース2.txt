@@ -20,6 +20,9 @@ public class FGJV9300ApiController implements Serializable {
 
     /* ユーザーセッション */
     AAJO1500 userSession;
+    
+    /* 緊急対応 */
+    String test = "緊急対応";
 
     /* リクエスト情報 */
     AAJO1400 requestInfo;
