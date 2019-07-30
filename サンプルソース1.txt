@@ -18,7 +18,7 @@ import javax.ws.rs.core.MediaType;
 @SessionScoped
 public class FGJV9300ApiController implements Serializable {
 
-String test;
+String test2;
 
     /* ユーザーセッション */
     AAJO1500 userSession;
