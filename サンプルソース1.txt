@@ -17,9 +17,10 @@ import javax.ws.rs.core.MediaType;
 @Path("fgjx9300")
 @SessionScoped
 public class FGJV9300ApiController implements Serializable {
-
+/* 修正します */
     /* ユーザーセッション */
     AAJO1500 userSession;
+    String testA;
 
     /* リクエスト情報 */
     AAJO1400 requestInfo;
