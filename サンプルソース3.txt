@@ -1,0 +1,209 @@
+import java.io.Serializable;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Level;
+import javax.enterprise.context.SessionScoped;
+import javax.inject.Inject;
+import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.Consumes;
+import javax.ws.rs.GET;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
+
+@Path("fgjx9300")
+@SessionScoped
+public class FGJV9300ApiController implements Serializable {
+
+    /* ユーザーセッション */
+    AAJO1500 userSession;
+
+    /* リクエスト情報 */
+    AAJO1400 requestInfo;
+
+    /* 退避データ */
+    FGJV9300SaveData saveData;
+
+    /* SQL登録・訂正・削除判断用 */
+    FGJV9300ApiForm saveResultForm;
+
+    /* 戻る処理時データ保持用 */
+    FGJV9300ApiForm form;
+
+    /* メッセージ取得 */
+    AAJO0000 apiLogger = new AAJO0000();
+
+    /* PF01名称 */
+    private static final String FUNC1_NAME = "1:検索";
+
+    FGJV9300ApiController() {
+
+    }
+
+    /**
+     * CDIからインジェクション
+     *
+     * @param userSession
+     * @param requestInfo
+     */
+    @Inject
+    FGJV9300ApiController(
+            AAJO1500 userSession,
+            AAJO1400 requestInfo) {
+        this.userSession = userSession;
+        this.requestInfo = requestInfo;
+    }
+
+    /**
+     * 初期処理
+     *
+     * @param request
+     * @return FGJV9300ApiForm
+     */
+    @GET
+    @Path("init")
+    @Produces(MediaType.APPLICATION_JSON)
+    public FGJV9300ApiForm init(@Context HttpServletRequest request) {
+        FGJV9300ApiForm init = new FGJV9300ApiForm();
+
+        try {
+            // 開始ログ出力
+            apiLogger.infoMessage(Level.INFO, userSession, request, FGJV9300ApiForm.PROGRAM_ID, AAJO1600.L_MODE_HEAD, "init START");
+
+            // PGID・PG名称の追加
+            requestInfo.setInit(FGJV9300ApiForm.PROGRAM_ID, FGJV9300ApiForm.PROGRAM_NAME);
+
+            // 退避データ保持エリアの作成
+            saveData = new FGJV9300SaveData();
+
+            // 初期表示データを取得
+            init = createInitData();
+
+        } catch (Exception ex) {
+            // メッセ―ジ設定
+            init.getCmnFtr().setMessage(AAJO1900.getMessage(AAJO1800.MSG_AAM0599E));
+
+            // エラーログ出力
+            apiLogger.infoMessage(Level.SEVERE, userSession, request, FGJV9300ApiForm.PROGRAM_ID, AAJO1600.L_MODE_HEAD, "init Exception");
+            apiLogger.exceptionLog(ex);
+        } finally {
+            // 終了ログ出力
+            apiLogger.infoMessage(Level.INFO, userSession, request, FGJV9300ApiForm.PROGRAM_ID, AAJO1600.L_MODE_HEAD, "init END");
+        }
+
+        return init;
+    }
+
+    /**
+     * PF06(確定)押下処理
+     *
+     * @param request
+     * @param paraForm
+     * @return
+     * @throws Exception
+     */
+    @POST
+    @Path("clickPF06")
+    @Produces(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+    @Consumes(MediaType.APPLICATION_JSON + "; charset=UTF-8")
+    public FGJV9300ApiForm clickPF06(@Context HttpServletRequest request, FGJV9300ApiForm paraForm) throws Exception {
+        FGJV9300ApiForm resultForm = paraForm;
+        FGJV9300Body body = (FGJV9300Body) resultForm.getBody();         // ボディデータ
+        String strMode = resultForm.getControl().getMode();              // モード
+        FGJV9300SQLFacilities sqlFacility = new FGJV9300SQLFacilities();
+        boolean errFlg = true;
+        String strUrisksNm;
+        String strMsgId = "";
+        List<String> lstMsg = new ArrayList<>();   // 置換文字リスト
+
+        try {
+            // 開始ログ出力
+            apiLogger.infoMessage(Level.INFO, userSession, request, FGJV9300ApiForm.PROGRAM_ID, paraForm.getControl().getMode(), "clickPF06 START");
+
+            // 戻る処理用データ退避
+            if (strMode.equals(AAJO1600.L_MODE_HEAD)) {
+                saveData.setHeadBackData(resultForm);
+            }
+            if (strMode.equals(AAJO1600.L_MODE_BODY)) {
+                // コードが空なら名称をクリアする
+                for (int i = 0; i < body.getList().size(); i++) {
+                    FGJV9300BodyRow row = (FGJV9300BodyRow) body.getRow(i);
+                    // 組織コードチェック
+                    if (row.getTxt_Ms_SskCd().getValue().trim().equals("")) {
+                        row.getLbl_Ms_SskNm().setValue("");
+                    }
+                    // 得意先コードチェック
+                    if (row.getTxt_Ms_CustCd().getValue().trim().equals("")) {
+                        row.getLbl_Ms_CustNm().setValue("");
+                    }
+                }
+                saveData.setBodyBackData(resultForm);
+            }
+
+            // 入力チェック
+            // ここでボディー→確認時の組織名称、得意先名称の見た目上の変更も行う
+            strMsgId = InputCheck(resultForm);
+            if (!strMsgId.equals("")) {
+                errFlg = false;
+            }
+
+            // コネクション作成
+            sqlFacility.dbConnection();
+
+            // 取引先マスタチェック            
+            strUrisksNm = sqlFacility.searchTorihikisakiMst(userSession, body);
+            if (strUrisksNm.equals("")) {
+                errFlg = false;
+                body.getWij_Hd_UrisksCd().setError(AAJO1210.ERR);
+                if (strMsgId.equals("")) {
+                    strMsgId = AAJO1800.MSG_FDM0130E;
+                    lstMsg.add("");
+                    resultForm.getCmnFtr().setMessage(AAJO1900.getCommonMessage(strMsgId, lstMsg));
+                }
+            }
+
+            // SQLデータ（登録・更新・削除）処理
+            if (errFlg && strMode.equals(AAJO1600.L_MODE_KAKUNIN)) {
+                executeSQL(resultForm);
+            }
+
+            // 画面モード変更
+            // ヘッダモードからボディモードに変更
+            if (errFlg && strMode.equals(AAJO1600.L_MODE_HEAD)) {
+                resultForm.getControl().setMode(AAJO1600.L_MODE_BODY);
+                // ボディモードから確認モード
+            } else if (errFlg && strMode.equals(AAJO1600.L_MODE_BODY)) {
+                resultForm.getControl().setMode(AAJO1600.L_MODE_KAKUNIN);
+                // 確認モードから結果モード
+            } else if (errFlg && strMode.equals(AAJO1600.L_MODE_KAKUNIN)) {
+                resultForm.getControl().setMode(AAJO1600.L_MODE_KEKKA);
+            }
+            form = resultForm;
+
+            setPFKeyEnable(resultForm, resultForm.getControl().getMode());
+
+            // 画面表示データ取得
+            if (errFlg && (strMode.equals(AAJO1600.L_MODE_HEAD) || (strMode.equals(AAJO1600.L_MODE_KAKUNIN)))) {
+                resultForm = createMeisaiData(resultForm.getControl().getMode(), strUrisksNm, body, paraForm);
+                saveResultForm = resultForm;
+            }
+
+            // 更新確認・更新完了メッセージセット
+            if (errFlg && resultForm.getControl().getMode().equals(AAJO1600.L_MODE_KAKUNIN)) {
+                strMsgId = AAJO1800.MSG_FDM0002I;
+            } else if (errFlg && resultForm.getControl().getMode().equals(AAJO1600.L_MODE_KEKKA)) {
+                strMsgId = "FDM0005I";
+            }
+            // メッセージ設定
+            if (errFlg) {
+                if (!strMsgId.equals("")) {
+                    resultForm.getCmnFtr().setMessage(AAJO1900.getCommonMessage(strMsgId, lstMsg));
+                }
+            }
+
+        } catch (SQLException ex) {
+            // メッセ―ジ設定
+            resultForm.getCmnFtr().setMessage(AAJO1900.getMessage(AAJO1800.MSG_PPM0025E));
